@@ -89,7 +89,7 @@ I've created a complete **3-tier application** (Frontend → Backend → Postgre
 
 ```bash
 git clone https://github.com/aritraghosh/otel-aks-autoconfiguration-demo
-cd otel-aks-demo/simple-3tier
+cd otel-aks-autoconfiguration-demo
 ```
 
 ### 2. Configure Your Azure Settings
@@ -473,7 +473,7 @@ The repository includes:
 ```bash
 # Get started in 3 commands:
 git clone https://github.com/aritraghosh/otel-aks-autoconfiguration-demo
-cd otel-aks-demo/simple-3tier
+cd otel-aks-autoconfiguration-demo
 ./scripts/setup.sh && ./scripts/build-and-push.sh && ./scripts/deploy.sh
 ```
 
