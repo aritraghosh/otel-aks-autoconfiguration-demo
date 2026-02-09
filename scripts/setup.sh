@@ -177,12 +177,8 @@ EOF
 print_info "Verifying Instrumentation CR..."
 kubectl get instrumentation -n $NAMESPACE
 
-# Restart AMA pods to pick up the new Instrumentation CR
-print_info "Restarting Azure Monitor Agent pods to pick up configuration..."
-kubectl delete pods -n kube-system -l rsName=ama-logs
-print_info "Waiting for AMA pods to restart..."
-sleep 10
-kubectl wait --for=condition=ready pod -l rsName=ama-logs -n kube-system --timeout=120s || print_warning "Some AMA pods may still be starting"
+print_warning "Note: You do NOT need to restart ama-logs pods. AMA automatically picks up Instrumentation CR."
+print_warning "After deploying your apps, you MUST restart your workload pods to inject OTEL environment variables."
 
 print_info ""
 print_info "=========================================="
@@ -192,8 +188,9 @@ print_info ""
 print_info "Next steps:"
 print_info "  1. Build and push Docker images: ./scripts/build-and-push.sh"
 print_info "  2. Deploy applications: ./scripts/deploy.sh"
-print_info "  3. Access the application and generate traffic"
-print_info "  4. View telemetry in Application Insights (wait 3-5 minutes)"
+print_info "  3. Restart workloads: kubectl rollout restart deployment/frontend deployment/backend -n $NAMESPACE"
+print_info "  4. Access the application and generate traffic"
+print_info "  5. View telemetry in Application Insights (wait 3-5 minutes)"
 print_info ""
 print_info "To view Application Insights in the portal:"
 APP_INSIGHTS_ID=$(az monitor app-insights component show \

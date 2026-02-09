@@ -185,10 +185,12 @@ az aks create \
 ```
 
 **Critical**: The `--enable-azure-monitor-app-monitoring` flag is **required** for auto-configuration. It:
-- Deploys Azure Monitor Agent (AMA) as a DaemonSet on each node
+- Deploys **Azure Monitor Agent (AMA)** as a DaemonSet on each node (ama-logs pods)
 - Configures AMA to listen on OTLP endpoints (ports 28331 for traces/logs, 28333 for metrics)
 - Sets up Data Collection Rules (DCR) infrastructure for routing telemetry
 - Enables environment variable injection for OpenTelemetry
+
+**Prerequisites**: The `ama-logs` DaemonSet must be running on your AKS cluster. This is automatically deployed when you use `--enable-azure-monitor-app-monitoring` flag during cluster creation.
 
 **Already have an AKS cluster?** Enable monitoring on existing cluster:
 ```bash
@@ -204,6 +206,12 @@ az aks get-credentials \
   --resource-group $RESOURCE_GROUP \
   --name $AKS_CLUSTER_NAME \
   --overwrite-existing
+```
+
+**Verify AMA pods are running:**
+```bash
+kubectl get pods -n kube-system | grep ama-logs
+# You should see ama-logs-xxxxx pods running on each node
 ```
 
 #### 4b. Create Application Insights with OTLP Support
@@ -362,21 +370,11 @@ EOF
 
 **Reference**: [Microsoft Docs - Auto-configuration for OpenTelemetry](https://learn.microsoft.com/en-us/azure/azure-monitor/app/kubernetes-open-protocol#autoconfiguration-apps-already-instrumented-with-opentelemetry-sdks)
 
-### Step 10: Restart Azure Monitor Agent Pods
+### Step 10: Restart Your Application Workloads
 
-AMA pods need to restart to pick up the new Instrumentation CR:
+⚠️ **Critical**: After creating the Instrumentation resource, you must restart your application pods so they receive the injected OpenTelemetry environment variables.
 
-```bash
-# Restart AMA pods
-kubectl delete pods -n kube-system -l rsName=ama-logs
-
-# Wait for pods to be ready
-kubectl wait --for=condition=ready pod -l rsName=ama-logs -n kube-system --timeout=120s
-```
-
-### Step 11: Restart Your Application Workloads
-
-Your application pods need to restart to get the injected OpenTelemetry environment variables:
+**Note**: You do **NOT** need to restart `ama-logs` pods. The AMA DaemonSet automatically picks up the Instrumentation CR configuration. Only restart your application workloads.
 
 ```bash
 # Restart application pods
@@ -388,7 +386,13 @@ kubectl rollout status deployment/frontend -n otel-demo
 kubectl rollout status deployment/backend -n otel-demo
 ```
 
-### Step 12: Verify Environment Variables are Injected
+**What happens during restart:**
+1. AMA reads the Instrumentation CR and prepares environment variables
+2. Pods restart and AMA injects OTEL_* environment variables into them
+3. Your OpenTelemetry SDK reads these variables on startup
+4. Telemetry starts flowing: App → AMA → Application Insights
+
+### Step 11: Verify Environment Variables are Injected
 
 Check that OpenTelemetry configuration was injected:
 
@@ -407,7 +411,7 @@ kubectl exec -n otel-demo deployment/frontend -- env | grep OTEL_
 
 ## Test and View Telemetry
 
-### Step 13: Generate Traffic
+### Step 12: Generate Traffic
 
 Get the frontend URL and make some requests:
 
@@ -421,7 +425,7 @@ curl http://$FRONTEND_IP/api/stats
 curl http://$FRONTEND_IP/api/users/1
 ```
 
-### Step 14: View Telemetry in Application Insights
+### Step 13: View Telemetry in Application Insights
 
 **Wait 3-5 minutes for data ingestion**, then:
 
