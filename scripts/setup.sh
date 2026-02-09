@@ -100,6 +100,7 @@ az aks create \
   --enable-managed-identity \
   --attach-acr $ACR_NAME \
   --enable-azure-monitor-metrics \
+  --enable-azure-monitor-app-monitoring \
   --generate-ssh-keys \
   --output none
 

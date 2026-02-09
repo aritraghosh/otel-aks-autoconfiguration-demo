@@ -61,7 +61,7 @@ sdk.start();  // Done!
 
 The SDK automatically reads the injected `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` environment variable and sends telemetry to the local Azure Monitor Agent.
 
-## Live Demo: Deploy in 20 Minutes
+## Live Demo: Deploy in 25-30 Minutes
 
 I've created a complete **3-tier application** (Frontend → Backend → PostgreSQL) instrumented with pure OpenTelemetry to demonstrate this feature.
 
@@ -78,14 +78,50 @@ I've created a complete **3-tier application** (Frontend → Backend → Postgre
 
 ### Prerequisites
 
+Before you begin, you need:
+
 - Azure subscription
-- Azure CLI installed
+- Azure CLI installed and logged in (`az login`)
 - `kubectl` and `docker` installed
-- ~20 minutes of your time
+- `jq` installed (for parsing JSON in scripts)
+- ~25-30 minutes of your time
+
+⚠️ **Important**: This feature is currently in **preview**. You need to enable it on your subscription first.
 
 ## Step-by-Step Demo
 
-### 1. Clone the Repository
+### 1. Enable the Preview Feature (One-time Setup)
+
+Since Azure Monitor Auto-Configuration for AKS is in preview, you must register the feature flag on your subscription:
+
+```bash
+# Register the preview feature
+az feature register \
+  --namespace Microsoft.ContainerService \
+  --name AKSAzureMonitorAutoConfiguration
+
+# Wait for registration to complete (takes 2-5 minutes)
+# Check status until it shows "Registered"
+az feature show \
+  --namespace Microsoft.ContainerService \
+  --name AKSAzureMonitorAutoConfiguration \
+  --query properties.state
+
+# Once registered, refresh the provider
+az provider register --namespace Microsoft.ContainerService
+```
+
+**Wait for the feature to show `"Registered"` before proceeding.** You can check the status periodically:
+
+```bash
+# Keep running this until you see "Registered"
+az feature show \
+  --namespace Microsoft.ContainerService \
+  --name AKSAzureMonitorAutoConfiguration \
+  --query properties.state -o tsv
+```
+
+### 2. Clone the Repository
 
 ```bash
 git clone https://github.com/aritraghosh/otel-aks-autoconfiguration-demo
@@ -113,7 +149,7 @@ export APP_INSIGHTS_NAME="otel-demo-insights"
 export NAMESPACE="otel-demo"
 ```
 
-### 3. Run the Automated Setup
+### 4. Run the Automated Setup
 
 This script creates all Azure resources and configures auto-configuration:
 
@@ -122,15 +158,29 @@ This script creates all Azure resources and configures auto-configuration:
 ```
 
 **What it does (automatically):**
-- ✅ Creates AKS cluster with Azure Monitor enabled
-- ✅ Creates Azure Container Registry (ACR)
-- ✅ Creates Application Insights
-- ✅ Configures namespace with auto-configuration annotation
-- ✅ Creates Instrumentation custom resource
+- ✅ Creates AKS cluster with `--enable-azure-monitor-app-monitoring` flag (required for auto-configuration)
+- ✅ Creates Azure Container Registry (ACR) and attaches it to AKS
+- ✅ Creates Application Insights resource
+- ✅ Configures namespace with `instrumentation.opentelemetry.io/inject-configuration="true"` annotation
+- ✅ Creates Instrumentation custom resource pointing to your Application Insights
+- ✅ Restarts Azure Monitor Agent (AMA) pods to pick up configuration
+
+**Critical flag**: The `--enable-azure-monitor-app-monitoring` flag during AKS creation enables the auto-configuration feature. This tells AKS to:
+- Deploy Azure Monitor Agent with OTLP endpoints
+- Enable environment variable injection for OpenTelemetry configuration
+- Set up Data Collection Rules for routing telemetry
+
+**Already have an AKS cluster?** You can enable this on an existing cluster:
+```bash
+az aks update \
+  --resource-group {your-resource-group} \
+  --name {your-cluster-name} \
+  --enable-azure-monitor-app-monitoring
+```
 
 **Time: ~10 minutes**
 
-### 4. Build and Push Docker Images
+### 5. Build and Push Docker Images
 
 ```bash
 ./scripts/build-and-push.sh
@@ -143,7 +193,7 @@ This script creates all Azure resources and configures auto-configuration:
 
 **Time: ~5 minutes**
 
-### 5. Deploy the Application
+### 6. Deploy the Application
 
 ```bash
 ./scripts/deploy.sh
@@ -156,7 +206,7 @@ This script creates all Azure resources and configures auto-configuration:
 
 **Time: ~3 minutes**
 
-### 6. Test the Application
+### 7. Test the Application
 
 Get the frontend URL:
 ```bash
@@ -173,7 +223,7 @@ curl http://$FRONTEND_IP/api/stats
 curl http://$FRONTEND_IP/api/users/1
 ```
 
-### 7. View Telemetry in Application Insights
+### 8. View Telemetry in Application Insights
 
 **Wait 3-5 minutes for data ingestion**, then:
 
@@ -466,7 +516,7 @@ The repository includes:
 - ✅ Troubleshooting guide
 - ✅ Configurable for your Azure subscription
 
-**Time to deploy**: ~20 minutes
+**Time to deploy**: ~25-30 minutes
 **Lines of Azure code**: 0
 **Vendor lock-in**: None
 
@@ -496,7 +546,7 @@ Azure Monitor Auto-Configuration for AKS eliminates the trade-off between using 
 - ✅ **Full Application Insights** - Distributed tracing, metrics, logs
 - ✅ **Future-proof** - Switch backends anytime
 
-The best part? **It takes 20 minutes to see it working** with the demo repository.
+The best part? **It takes 25-30 minutes to see it working** with the demo repository.
 
 ---
 
