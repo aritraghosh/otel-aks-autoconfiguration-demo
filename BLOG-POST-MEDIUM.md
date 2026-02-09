@@ -90,9 +90,19 @@ Before you begin, you need:
 
 ## Step-by-Step Demo
 
-### 1. Enable the Preview Feature (One-time Setup)
+The deployment is organized into **three phases**:
 
-Since Azure Monitor Auto-Configuration for AKS is in preview, you must register the feature flag on your subscription:
+1. **Part 1: Prerequisites & Infrastructure** - Enable preview feature, create AKS with monitoring flag, create Application Insights
+2. **Part 2: Deploy Application** - Build images and deploy your OpenTelemetry-instrumented apps
+3. **Part 3: Enable Auto-Configuration** - Create Instrumentation resource, enable monitoring, restart workloads
+
+---
+
+## Part 1: Prerequisites & Infrastructure Setup
+
+### Step 1: Enable the Preview Feature (One-time Setup)
+
+⚠️ **Important**: This feature is currently in **preview**. Register it on your subscription:
 
 ```bash
 # Register the preview feature
@@ -105,30 +115,22 @@ az feature register \
 az feature show \
   --namespace Microsoft.ContainerService \
   --name AKSAzureMonitorAutoConfiguration \
-  --query properties.state
+  --query properties.state -o tsv
 
 # Once registered, refresh the provider
 az provider register --namespace Microsoft.ContainerService
 ```
 
-**Wait for the feature to show `"Registered"` before proceeding.** You can check the status periodically:
+**Wait until the status shows `"Registered"` before proceeding.**
 
-```bash
-# Keep running this until you see "Registered"
-az feature show \
-  --namespace Microsoft.ContainerService \
-  --name AKSAzureMonitorAutoConfiguration \
-  --query properties.state -o tsv
-```
-
-### 2. Clone the Repository
+### Step 2: Clone the Repository
 
 ```bash
 git clone https://github.com/aritraghosh/otel-aks-autoconfiguration-demo
 cd otel-aks-autoconfiguration-demo
 ```
 
-### 2. Configure Your Azure Settings
+### Step 3: Configure Your Settings
 
 ```bash
 # Copy the example configuration
@@ -149,31 +151,27 @@ export APP_INSIGHTS_NAME="otel-demo-insights"
 export NAMESPACE="otel-demo"
 ```
 
-### 4. Run the Automated Setup
+### Step 4: Create Azure Infrastructure
 
-This script creates all Azure resources and configures auto-configuration:
+Run the first part of setup (creates AKS, ACR, App Insights):
 
 ```bash
-./scripts/setup.sh
+./scripts/setup-infra.sh  # Or use setup.sh for full automation
 ```
 
-**What it does (automatically):**
-- ✅ Creates AKS cluster with `--enable-azure-monitor-app-monitoring` flag (required for auto-configuration)
-- ✅ Creates Azure Container Registry (ACR) and attaches it to AKS
-- ✅ Creates Application Insights resource
-- ✅ Creates namespace with `instrumentation.opentelemetry.io/inject-configuration="true"` annotation
-- ✅ **Creates Instrumentation custom resource** ([see docs](https://learn.microsoft.com/en-us/azure/azure-monitor/app/kubernetes-open-protocol#autoconfiguration-apps-already-instrumented-with-opentelemetry-sdks)) that:
-  - Points to your Application Insights connection string
-  - Enables environment variable injection for OpenTelemetry
-  - Sets `autoInstrumentationPlatforms: []` (empty because apps already have OpenTelemetry SDK)
-- ✅ Restarts Azure Monitor Agent (AMA) pods to pick up configuration
+**What this creates:**
+- ✅ **AKS Cluster** with `--enable-azure-monitor-app-monitoring` flag
+  - This flag deploys Azure Monitor Agent (AMA) with OTLP endpoints
+  - Enables the infrastructure for auto-configuration
+- ✅ **Azure Container Registry (ACR)** attached to AKS
+- ✅ **Application Insights** resource
 
-**Critical flag**: The `--enable-azure-monitor-app-monitoring` flag during AKS creation enables the auto-configuration feature. This tells AKS to:
-- Deploy Azure Monitor Agent with OTLP endpoints
-- Enable environment variable injection for OpenTelemetry configuration
-- Set up Data Collection Rules for routing telemetry
+**Critical**: The `--enable-azure-monitor-app-monitoring` flag is **required** for auto-configuration to work. It:
+- Deploys Azure Monitor Agent (AMA) as a DaemonSet on each node
+- Configures AMA to listen on OTLP endpoints (ports 28331 for traces/logs, 28333 for metrics)
+- Sets up Data Collection Rules (DCR) for routing telemetry
 
-**Already have an AKS cluster?** You can enable this on an existing cluster:
+**Already have an AKS cluster?** Enable monitoring on existing cluster:
 ```bash
 az aks update \
   --resource-group {your-resource-group} \
@@ -183,50 +181,166 @@ az aks update \
 
 **Time: ~10 minutes**
 
-### 5. Build and Push Docker Images
+---
+
+## Part 2: Deploy Your Application
+
+### Step 5: Build and Push Docker Images
 
 ```bash
 ./scripts/build-and-push.sh
 ```
 
 **What it does:**
-- ✅ Builds frontend and backend images
+- ✅ Builds frontend and backend images with OpenTelemetry SDK
 - ✅ Pushes to your ACR
 - ✅ Tags with your ACR name
 
 **Time: ~5 minutes**
 
-### 6. Deploy the Application
+### Step 6: Deploy Applications to AKS
 
 ```bash
 ./scripts/deploy.sh
 ```
 
-**What it does:**
-- ✅ Deploys frontend, backend, and PostgreSQL
-- ✅ Creates LoadBalancer service
-- ✅ Waits for pods to be ready
+**What it deploys:**
+- ✅ Frontend (Express.js with OpenTelemetry SDK v0.211.0)
+- ✅ Backend (Express.js + PostgreSQL with OpenTelemetry SDK v0.211.0)
+- ✅ PostgreSQL database
+- ✅ LoadBalancer service
 
 **Time: ~3 minutes**
 
-### 7. Test the Application
+### Step 7: Verify Application is Running
 
-Get the frontend URL:
 ```bash
+# Check pods are running
+kubectl get pods -n otel-demo
+
+# Get frontend URL
 kubectl get svc frontend -n otel-demo
 ```
 
-Generate some traffic:
+**At this point, your application is running but NOT yet sending telemetry to Application Insights.** The OpenTelemetry SDK needs configuration, which we'll enable in Part 3.
+
+---
+
+## Part 3: Enable Auto-Configuration
+
+### Step 8: Create Namespace Annotation
+
+Annotate the namespace to enable auto-configuration:
+
 ```bash
+kubectl annotate namespace otel-demo \
+  instrumentation.opentelemetry.io/inject-configuration="true" \
+  --overwrite
+```
+
+This tells AKS to inject OpenTelemetry configuration into pods in this namespace.
+
+### Step 9: Create Instrumentation Resource
+
+This is the **critical step** that connects your apps to Application Insights.
+
+First, get your Application Insights connection string:
+
+```bash
+APP_INSIGHTS_CONNECTION_STRING=$(az monitor app-insights component show \
+  --app otel-demo-insights \
+  --resource-group otel-demo-rg \
+  --query connectionString -o tsv)
+
+echo $APP_INSIGHTS_CONNECTION_STRING
+# Output: InstrumentationKey=11111111-1111-1111-1111-111111111111;IngestionEndpoint=https://eastus2-3.in.applicationinsights.azure.com/;LiveEndpoint=https://eastus2.livediagnostics.monitor.azure.com/
+```
+
+Create the Instrumentation custom resource:
+
+```bash
+cat <<EOF | kubectl apply -f -
+apiVersion: monitor.azure.com/v1
+kind: Instrumentation
+metadata:
+  name: default
+  namespace: otel-demo
+spec:
+  destination:
+    applicationInsightsConnectionString: "$APP_INSIGHTS_CONNECTION_STRING"
+  settings:
+    autoInstrumentationPlatforms: []
+EOF
+```
+
+**Key components explained:**
+- `destination.applicationInsightsConnectionString`: **Required**. Full connection string including InstrumentationKey, IngestionEndpoint, and LiveEndpoint
+- `autoInstrumentationPlatforms: []`: **Empty array** because apps are already instrumented with OpenTelemetry SDK
+  - If you wanted AKS to auto-inject instrumentation, you'd specify languages here (e.g., `["java", "python"]`)
+  - For pre-instrumented apps (our case), keep it empty
+
+**Reference**: [Microsoft Docs - Auto-configuration for OpenTelemetry](https://learn.microsoft.com/en-us/azure/azure-monitor/app/kubernetes-open-protocol#autoconfiguration-apps-already-instrumented-with-opentelemetry-sdks)
+
+### Step 10: Restart Azure Monitor Agent Pods
+
+AMA pods need to restart to pick up the new Instrumentation CR:
+
+```bash
+# Restart AMA pods
+kubectl delete pods -n kube-system -l rsName=ama-logs
+
+# Wait for pods to be ready
+kubectl wait --for=condition=ready pod -l rsName=ama-logs -n kube-system --timeout=120s
+```
+
+### Step 11: Restart Your Application Workloads
+
+Your application pods need to restart to get the injected OpenTelemetry environment variables:
+
+```bash
+# Restart application pods
+kubectl rollout restart deployment/frontend -n otel-demo
+kubectl rollout restart deployment/backend -n otel-demo
+
+# Wait for rollout to complete
+kubectl rollout status deployment/frontend -n otel-demo
+kubectl rollout status deployment/backend -n otel-demo
+```
+
+### Step 12: Verify Environment Variables are Injected
+
+Check that OpenTelemetry configuration was injected:
+
+```bash
+kubectl exec -n otel-demo deployment/frontend -- env | grep OTEL_
+
+# You should see:
+# OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://10.224.0.5:28331/v1/traces
+# OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=http://10.224.0.5:28333/v1/metrics
+# OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://10.224.0.5:28331/v1/logs
+# OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http/protobuf
+# OTEL_RESOURCE_ATTRIBUTES=service.namespace=otel-demo,...
+```
+
+---
+
+## Test and View Telemetry
+
+### Step 13: Generate Traffic
+
+Get the frontend URL and make some requests:
+
+```bash
+# Get the LoadBalancer IP
 FRONTEND_IP=$(kubectl get svc frontend -n otel-demo -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 
-# Make requests
+# Generate traffic
 curl http://$FRONTEND_IP/api/users
 curl http://$FRONTEND_IP/api/stats
 curl http://$FRONTEND_IP/api/users/1
 ```
 
-### 8. View Telemetry in Application Insights
+### Step 14: View Telemetry in Application Insights
 
 **Wait 3-5 minutes for data ingestion**, then:
 
@@ -261,6 +375,8 @@ CloudRoleName              Name                Count
 [otel-demo]/backend        GET /users          15
 [otel-demo]/backend        GET /stats          8
 ```
+
+---
 
 ## What You Just Deployed
 
@@ -344,18 +460,18 @@ metadata:
   name: default
   namespace: otel-demo
 spec:
-  destination:
-    applicationInsightsConnectionString: "InstrumentationKey=...;IngestionEndpoint=..."
+  destination:  # Required
+    applicationInsightsConnectionString: "InstrumentationKey=11111111-1111-1111-1111-111111111111;IngestionEndpoint=https://eastus2-3.in.applicationinsights.azure.com/;LiveEndpoint=https://eastus2.livediagnostics.monitor.azure.com/"
   settings:
     autoInstrumentationPlatforms: []  # Empty = apps already have OpenTelemetry SDK
 ```
 
 **Key points about the Instrumentation CR:**
-- Must be named `default` or explicitly referenced by pods
-- `applicationInsightsConnectionString`: Points to your Application Insights resource
+- `destination`: **Required section** that specifies where telemetry goes
+- `applicationInsightsConnectionString`: **Required**. Must include InstrumentationKey, IngestionEndpoint, and LiveEndpoint
 - `autoInstrumentationPlatforms: []`: **Empty array** because your apps are already instrumented with OpenTelemetry SDK
-  - If this was Java/Python/Node auto-instrumentation, you'd specify the platform here
-  - For pre-instrumented apps, leave it empty
+  - If you wanted AKS to auto-inject instrumentation, you'd specify languages here (e.g., `["java", "python"]`)
+  - For pre-instrumented apps (our case), keep it empty
 
 **What happens when you create this?**
 1. Azure Monitor Agent (AMA) reads the Instrumentation CR
