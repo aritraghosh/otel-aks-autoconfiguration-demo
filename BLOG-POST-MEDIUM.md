@@ -153,33 +153,114 @@ export NAMESPACE="otel-demo"
 
 ### Step 4: Create Azure Infrastructure
 
-Run the first part of setup (creates AKS, ACR, App Insights):
+This step creates the foundational resources needed for auto-configuration.
+
+#### 4a. Create Resource Group, ACR, and AKS Cluster
 
 ```bash
-./scripts/setup-infra.sh  # Or use setup.sh for full automation
+# Set your subscription
+az account set --subscription $SUBSCRIPTION_ID
+
+# Create resource group
+az group create \
+  --name $RESOURCE_GROUP \
+  --location $LOCATION
+
+# Create Azure Container Registry
+az acr create \
+  --resource-group $RESOURCE_GROUP \
+  --name $ACR_NAME \
+  --sku Basic
+
+# Create AKS cluster with monitoring flag
+az aks create \
+  --resource-group $RESOURCE_GROUP \
+  --name $AKS_CLUSTER_NAME \
+  --node-count 2 \
+  --node-vm-size Standard_DS2_v2 \
+  --enable-managed-identity \
+  --attach-acr $ACR_NAME \
+  --enable-azure-monitor-app-monitoring \
+  --generate-ssh-keys
 ```
 
-**What this creates:**
-- ✅ **AKS Cluster** with `--enable-azure-monitor-app-monitoring` flag
-  - This flag deploys Azure Monitor Agent (AMA) with OTLP endpoints
-  - Enables the infrastructure for auto-configuration
-- ✅ **Azure Container Registry (ACR)** attached to AKS
-- ✅ **Application Insights** resource
-
-**Critical**: The `--enable-azure-monitor-app-monitoring` flag is **required** for auto-configuration to work. It:
+**Critical**: The `--enable-azure-monitor-app-monitoring` flag is **required** for auto-configuration. It:
 - Deploys Azure Monitor Agent (AMA) as a DaemonSet on each node
 - Configures AMA to listen on OTLP endpoints (ports 28331 for traces/logs, 28333 for metrics)
-- Sets up Data Collection Rules (DCR) for routing telemetry
+- Sets up Data Collection Rules (DCR) infrastructure for routing telemetry
+- Enables environment variable injection for OpenTelemetry
 
 **Already have an AKS cluster?** Enable monitoring on existing cluster:
 ```bash
 az aks update \
-  --resource-group {your-resource-group} \
-  --name {your-cluster-name} \
+  --resource-group $RESOURCE_GROUP \
+  --name $AKS_CLUSTER_NAME \
   --enable-azure-monitor-app-monitoring
 ```
 
-**Time: ~10 minutes**
+Get credentials:
+```bash
+az aks get-credentials \
+  --resource-group $RESOURCE_GROUP \
+  --name $AKS_CLUSTER_NAME \
+  --overwrite-existing
+```
+
+#### 4b. Create Application Insights with OTLP Support
+
+⚠️ **Important**: Application Insights must be created with OTLP support to accept OpenTelemetry data.
+
+```bash
+# Create Application Insights
+az monitor app-insights component create \
+  --app $APP_INSIGHTS_NAME \
+  --location $LOCATION \
+  --resource-group $RESOURCE_GROUP \
+  --application-type web
+```
+
+**What this creates:**
+- ✅ Application Insights resource with **OTLP ingestion enabled by default** (when created via CLI or portal)
+- ✅ Workspace-based Application Insights (modern architecture)
+- ✅ Endpoints for receiving OTLP data from Azure Monitor Agent
+
+**Get the connection string** (you'll need this in Part 3):
+```bash
+APP_INSIGHTS_CONNECTION_STRING=$(az monitor app-insights component show \
+  --app $APP_INSIGHTS_NAME \
+  --resource-group $RESOURCE_GROUP \
+  --query connectionString -o tsv)
+
+echo $APP_INSIGHTS_CONNECTION_STRING
+```
+
+**Connection string format:**
+```
+InstrumentationKey=11111111-1111-1111-1111-111111111111;
+IngestionEndpoint=https://eastus2-3.in.applicationinsights.azure.com/;
+LiveEndpoint=https://eastus2.livediagnostics.monitor.azure.com/
+```
+
+**Key components:**
+- `InstrumentationKey`: Unique identifier for your Application Insights resource
+- `IngestionEndpoint`: Where telemetry data is sent (region-specific)
+- `LiveEndpoint`: For Live Metrics Stream
+
+**Verify OTLP support:**
+```bash
+# Check that the resource was created
+az monitor app-insights component show \
+  --app $APP_INSIGHTS_NAME \
+  --resource-group $RESOURCE_GROUP \
+  --query "{name:name, location:location, kind:kind, connectionString:connectionString}" \
+  --output table
+```
+
+**Reference**: [Microsoft Docs - Create Application Insights with OTLP Support](https://learn.microsoft.com/en-us/azure/azure-monitor/app/kubernetes-open-protocol#3-create-an-application-insights-resource-with-otlp-support)
+
+**Time for all infrastructure: ~10-12 minutes**
+
+**💡 Automated option:** The repository includes `./scripts/setup.sh` that does all of steps 4a and 4b automatically.
 
 ---
 

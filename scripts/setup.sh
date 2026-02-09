@@ -115,12 +115,15 @@ kubectl get nodes
 
 # Create Application Insights
 print_info "Creating Application Insights '$APP_INSIGHTS_NAME'..."
+print_info "Note: Application Insights created via CLI has OTLP ingestion enabled by default"
 az monitor app-insights component create \
   --app $APP_INSIGHTS_NAME \
   --location $LOCATION \
   --resource-group $RESOURCE_GROUP \
   --application-type web \
   --output none
+
+print_info "Verifying Application Insights was created with OTLP support..."
 
 # Get Application Insights details
 export APP_INSIGHTS_CONNECTION_STRING=$(az monitor app-insights component show \
