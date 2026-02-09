@@ -174,6 +174,13 @@ EOF
 print_info "Verifying Instrumentation CR..."
 kubectl get instrumentation -n $NAMESPACE
 
+# Restart AMA pods to pick up the new Instrumentation CR
+print_info "Restarting Azure Monitor Agent pods to pick up configuration..."
+kubectl delete pods -n kube-system -l rsName=ama-logs
+print_info "Waiting for AMA pods to restart..."
+sleep 10
+kubectl wait --for=condition=ready pod -l rsName=ama-logs -n kube-system --timeout=120s || print_warning "Some AMA pods may still be starting"
+
 print_info ""
 print_info "=========================================="
 print_info "Azure resources setup completed!"

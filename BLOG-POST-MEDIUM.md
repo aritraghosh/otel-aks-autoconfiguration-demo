@@ -161,8 +161,11 @@ This script creates all Azure resources and configures auto-configuration:
 - ✅ Creates AKS cluster with `--enable-azure-monitor-app-monitoring` flag (required for auto-configuration)
 - ✅ Creates Azure Container Registry (ACR) and attaches it to AKS
 - ✅ Creates Application Insights resource
-- ✅ Configures namespace with `instrumentation.opentelemetry.io/inject-configuration="true"` annotation
-- ✅ Creates Instrumentation custom resource pointing to your Application Insights
+- ✅ Creates namespace with `instrumentation.opentelemetry.io/inject-configuration="true"` annotation
+- ✅ **Creates Instrumentation custom resource** ([see docs](https://learn.microsoft.com/en-us/azure/azure-monitor/app/kubernetes-open-protocol#autoconfiguration-apps-already-instrumented-with-opentelemetry-sdks)) that:
+  - Points to your Application Insights connection string
+  - Enables environment variable injection for OpenTelemetry
+  - Sets `autoInstrumentationPlatforms: []` (empty because apps already have OpenTelemetry SDK)
 - ✅ Restarts Azure Monitor Agent (AMA) pods to pick up configuration
 
 **Critical flag**: The `--enable-azure-monitor-app-monitoring` flag during AKS creation enables the auto-configuration feature. This tells AKS to:
@@ -321,15 +324,19 @@ These variables tell your OpenTelemetry SDK:
 
 ### How Auto-Configuration Was Set Up
 
-Two simple Kubernetes resources enable all of this:
+Auto-configuration for apps already instrumented with OpenTelemetry requires **two key Kubernetes resources**:
 
-**1. Namespace annotation:**
+#### 1. Namespace Annotation
+This tells AKS to enable auto-configuration for all pods in this namespace:
+
 ```bash
 kubectl annotate namespace otel-demo \
   instrumentation.opentelemetry.io/inject-configuration="true"
 ```
 
-**2. Instrumentation custom resource:**
+#### 2. Instrumentation Custom Resource (CR)
+This is the **critical piece** that connects your OpenTelemetry-instrumented apps to Application Insights:
+
 ```yaml
 apiVersion: monitor.azure.com/v1
 kind: Instrumentation
@@ -340,8 +347,23 @@ spec:
   destination:
     applicationInsightsConnectionString: "InstrumentationKey=...;IngestionEndpoint=..."
   settings:
-    autoInstrumentationPlatforms: []
+    autoInstrumentationPlatforms: []  # Empty = apps already have OpenTelemetry SDK
 ```
+
+**Key points about the Instrumentation CR:**
+- Must be named `default` or explicitly referenced by pods
+- `applicationInsightsConnectionString`: Points to your Application Insights resource
+- `autoInstrumentationPlatforms: []`: **Empty array** because your apps are already instrumented with OpenTelemetry SDK
+  - If this was Java/Python/Node auto-instrumentation, you'd specify the platform here
+  - For pre-instrumented apps, leave it empty
+
+**What happens when you create this?**
+1. Azure Monitor Agent (AMA) reads the Instrumentation CR
+2. AMA injects environment variables into pods in the annotated namespace
+3. Your OpenTelemetry SDK reads these variables automatically
+4. Telemetry flows from SDK → AMA → Application Insights (via Data Collection Rule)
+
+**Reference**: [Microsoft Docs - Auto-configuration for OpenTelemetry](https://learn.microsoft.com/en-us/azure/azure-monitor/app/kubernetes-open-protocol#autoconfiguration-apps-already-instrumented-with-opentelemetry-sdks)
 
 That's all the Azure-specific configuration needed!
 
