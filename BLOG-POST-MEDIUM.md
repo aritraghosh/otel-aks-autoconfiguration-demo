@@ -1,5 +1,7 @@
 # Azure Monitor Auto-Configuration for AKS: Zero Code, Full OpenTelemetry Observability
 
+> **⚠️ Preview Feature Notice**: As of February 2026, Azure Monitor Auto-Configuration for AKS is in public preview. Features and implementation details may change before general availability. For the latest information, please refer to the [official Azure documentation](https://learn.microsoft.com/en-us/azure/azure-monitor/app/kubernetes-open-protocol).
+
 ## The Problem
 
 You want to use **standard OpenTelemetry** in your Kubernetes applications to avoid vendor lock-in, but you also want the rich observability features of **Azure Application Insights**. Traditionally, this meant either:
@@ -494,6 +496,7 @@ curl http://$FRONTEND_IP/api/users/1
 1. Go to Azure Portal → Your Application Insights resource
 2. Click **"Application map"** to see service topology
 3. Click **"Transaction search"** to see distributed traces
+4. Click **"Performance"** to see request metrics
 
 #### Option 2: Azure CLI
 
@@ -523,7 +526,89 @@ CloudRoleName              Name                Count
 
 ---
 
-## What You Just Deployed
+## Screenshots: Telemetry in Action
+
+Here's what you'll see in Application Insights after the telemetry starts flowing:
+
+### 1. Application Map - Service Topology
+
+The Application Map shows your distributed system topology with automatic service discovery:
+
+![Application Map showing frontend → backend → PostgreSQL](screenshots/application-map.png)
+
+**What you see:**
+- **Frontend service** (otel-demo/frontend)
+- **Backend service** (otel-demo/backend)
+- **PostgreSQL database** dependency
+- Request rates and failure rates for each connection
+- Average response times
+
+This visualization is automatically generated from your OpenTelemetry traces - **no configuration needed**.
+
+### 2. Distributed Traces - End-to-End Request Flow
+
+Click on any request in Transaction Search to see the complete distributed trace:
+
+![Distributed trace showing request flow from frontend through backend to database](screenshots/distributed-trace.png)
+
+**What you see:**
+- Complete request timeline from frontend → backend → database
+- Each span with duration breakdown
+- HTTP status codes and response times
+- SQL query execution time
+- Context propagation across service boundaries
+
+**Example trace breakdown:**
+```
+GET /api/users (Frontend)           [540ms total]
+  ├─ GET /users (Backend)           [520ms]
+  │   └─ SELECT * FROM users (DB)   [480ms]
+  └─ Response serialization         [20ms]
+```
+
+### 3. Performance View - Request Metrics
+
+The Performance view shows aggregated metrics across all your requests:
+
+![Performance view showing request counts, durations, and dependencies](screenshots/performance-view.png)
+
+**What you see:**
+- Request counts by operation
+- Average, P50, P95, P99 latencies
+- Dependency call durations
+- Failure rates
+- Time-series graphs
+
+### 4. Transaction Search - Filtering and Analysis
+
+Search and filter traces by various criteria:
+
+![Transaction search with filters for service, operation, and time range](screenshots/transaction-search.png)
+
+**You can filter by:**
+- Service name (cloud_RoleName)
+- Operation name (HTTP method + path)
+- Status code
+- Duration
+- Custom properties
+- Time range
+
+### 5. Live Metrics - Real-time Telemetry
+
+Watch telemetry flow in real-time as requests happen:
+
+![Live Metrics showing real-time request rate and server metrics](screenshots/live-metrics.png)
+
+**Real-time data:**
+- Incoming request rate
+- Outgoing dependency call rate
+- Server CPU and memory usage
+- Request duration distribution
+- Sample traces streaming live
+
+---
+
+## What Makes This Powerful
 
 ### The Application Code
 
