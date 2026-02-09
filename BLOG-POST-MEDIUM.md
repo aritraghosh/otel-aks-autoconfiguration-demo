@@ -63,6 +63,16 @@ The SDK automatically reads the injected `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` en
 
 ## Live Demo: Deploy in 25-30 Minutes
 
+⚠️ **Important: This is a Preview Feature**
+
+Azure Monitor Auto-Configuration for AKS is currently in **preview**. This means:
+- No SLA guarantees
+- Not recommended for production workloads
+- Requires explicit preview feature registration
+- Some features may change before general availability
+
+**Full documentation**: [Azure Monitor OpenTelemetry Auto-Configuration for AKS](https://learn.microsoft.com/en-us/azure/azure-monitor/app/kubernetes-open-protocol)
+
 I've created a complete **3-tier application** (Frontend → Backend → PostgreSQL) instrumented with pure OpenTelemetry to demonstrate this feature.
 
 ### 🔗 GitHub Repository
@@ -81,12 +91,23 @@ I've created a complete **3-tier application** (Frontend → Backend → Postgre
 Before you begin, you need:
 
 - Azure subscription
-- Azure CLI installed and logged in (`az login`)
+- Azure CLI **version 2.78.0 or later** installed and logged in (`az login`)
 - `kubectl` and `docker` installed
 - `jq` installed (for parsing JSON in scripts)
+- `aks-preview` Azure CLI extension
 - ~25-30 minutes of your time
 
-⚠️ **Important**: This feature is currently in **preview**. You need to enable it on your subscription first.
+⚠️ **Important**: This feature is currently in **preview**. You must register **two separate preview features** on your subscription.
+
+**Check your Azure CLI version:**
+```bash
+az version
+# Ensure Azure CLI >= 2.78.0
+
+# Install/update aks-preview extension
+az extension add --name aks-preview
+az extension update --name aks-preview
+```
 
 ## Step-by-Step Demo
 
@@ -100,28 +121,54 @@ The deployment is organized into **three phases**:
 
 ## Part 1: Prerequisites & Infrastructure Setup
 
-### Step 1: Enable the Preview Feature (One-time Setup)
+### Step 1: Register Preview Features (One-time Setup)
 
-⚠️ **Important**: This feature is currently in **preview**. Register it on your subscription:
+⚠️ **Critical**: You must register **two separate preview features**:
+
+#### 1a. Register AKS Auto-Configuration Preview
 
 ```bash
-# Register the preview feature
+# Register the AKS preview feature
 az feature register \
   --namespace Microsoft.ContainerService \
-  --name AKSAzureMonitorAutoConfiguration
+  --name AzureMonitorAppMonitoringPreview
 
-# Wait for registration to complete (takes 2-5 minutes)
-# Check status until it shows "Registered"
+# Check status until it shows "Registered" (takes 2-5 minutes)
 az feature show \
   --namespace Microsoft.ContainerService \
-  --name AKSAzureMonitorAutoConfiguration \
+  --name AzureMonitorAppMonitoringPreview \
   --query properties.state -o tsv
 
 # Once registered, refresh the provider
 az provider register --namespace Microsoft.ContainerService
 ```
 
-**Wait until the status shows `"Registered"` before proceeding.**
+#### 1b. Register Application Insights OTLP Preview
+
+```bash
+# Register the Application Insights OTLP preview feature
+az feature register \
+  --namespace Microsoft.Insights \
+  --name OtlpApplicationInsights
+
+# Check status until it shows "Registered" (takes 2-5 minutes)
+az feature show \
+  --namespace Microsoft.Insights \
+  --name OtlpApplicationInsights \
+  --query properties.state -o tsv
+
+# Once registered, refresh the provider
+az provider register --namespace Microsoft.Insights
+```
+
+**Wait until BOTH features show `"Registered"` before proceeding.**
+
+You can check both statuses in parallel:
+```bash
+# Check both registrations
+az feature show --namespace Microsoft.ContainerService --name AzureMonitorAppMonitoringPreview --query properties.state -o tsv
+az feature show --namespace Microsoft.Insights --name OtlpApplicationInsights --query properties.state -o tsv
+```
 
 ### Step 2: Clone the Repository
 
@@ -214,29 +261,41 @@ kubectl get pods -n kube-system | grep ama-logs
 # You should see ama-logs-xxxxx pods running on each node
 ```
 
-#### 4b. Create Application Insights with OTLP Support
+#### 4b. Create Application Insights with OTLP Support (Azure Portal)
 
-⚠️ **Important**: Application Insights must be created with OTLP support to accept OpenTelemetry data.
+⚠️ **Important**: Application Insights with OTLP support must be created via the **Azure Portal**. The OTLP toggle is not available via CLI.
 
-```bash
-# Create Application Insights
-az monitor app-insights component create \
-  --app $APP_INSIGHTS_NAME \
-  --location $LOCATION \
-  --resource-group $RESOURCE_GROUP \
-  --application-type web
-```
+**Steps to create in Azure Portal:**
+
+1. Go to Azure Portal → **Create a resource** → Search for "Application Insights"
+
+2. **Basics tab:**
+   - Resource Group: `otel-demo-rg` (same as your AKS cluster)
+   - Name: `otel-demo-insights`
+   - Region: `East US` (same as your AKS cluster)
+   - Resource Mode: **Workspace-based**
+
+3. **Advanced tab (Critical):**
+   - ✅ Turn on **"Enable OTLP Support (Preview)"** - This is required!
+   - ✅ Set **"Use managed workspaces"** to **Yes**
+
+   **Important**: Use an Azure Monitor workspace that's **different** from the workspace used for infrastructure metrics. Managed workspaces handle this automatically.
+
+4. Click **"Review + Create"** → **"Create"**
 
 **What this creates:**
-- ✅ Application Insights resource with **OTLP ingestion enabled by default** (when created via CLI or portal)
+- ✅ Application Insights resource with **OTLP ingestion enabled**
 - ✅ Workspace-based Application Insights (modern architecture)
+- ✅ Separate Azure Monitor workspace for application telemetry
 - ✅ Endpoints for receiving OTLP data from Azure Monitor Agent
 
-**Get the connection string** (you'll need this in Part 3):
+**After creation, get the connection string:**
+
 ```bash
+# Get the connection string (you'll need this in Part 3)
 APP_INSIGHTS_CONNECTION_STRING=$(az monitor app-insights component show \
-  --app $APP_INSIGHTS_NAME \
-  --resource-group $RESOURCE_GROUP \
+  --app otel-demo-insights \
+  --resource-group otel-demo-rg \
   --query connectionString -o tsv)
 
 echo $APP_INSIGHTS_CONNECTION_STRING
@@ -249,26 +308,27 @@ IngestionEndpoint=https://eastus2-3.in.applicationinsights.azure.com/;
 LiveEndpoint=https://eastus2.livediagnostics.monitor.azure.com/
 ```
 
+**Save this connection string** - you'll need it when creating the Instrumentation resource in Part 3 (Step 9).
+
 **Key components:**
 - `InstrumentationKey`: Unique identifier for your Application Insights resource
 - `IngestionEndpoint`: Where telemetry data is sent (region-specific)
 - `LiveEndpoint`: For Live Metrics Stream
 
-**Verify OTLP support:**
+**Verify the resource:**
 ```bash
-# Check that the resource was created
 az monitor app-insights component show \
-  --app $APP_INSIGHTS_NAME \
-  --resource-group $RESOURCE_GROUP \
-  --query "{name:name, location:location, kind:kind, connectionString:connectionString}" \
+  --app otel-demo-insights \
+  --resource-group otel-demo-rg \
+  --query "{name:name, location:location, kind:kind}" \
   --output table
 ```
 
 **Reference**: [Microsoft Docs - Create Application Insights with OTLP Support](https://learn.microsoft.com/en-us/azure/azure-monitor/app/kubernetes-open-protocol#3-create-an-application-insights-resource-with-otlp-support)
 
-**Time for all infrastructure: ~10-12 minutes**
+**Time for all infrastructure: ~10-12 minutes** (plus portal UI interaction for App Insights)
 
-**💡 Automated option:** The repository includes `./scripts/setup.sh` that does all of steps 4a and 4b automatically.
+**💡 Note about automation:** The repository includes `./scripts/setup.sh` that automates step 4a (AKS/ACR creation). However, **Step 4b must be done manually** in the Azure Portal because the OTLP toggle is not available via Azure CLI.
 
 ---
 

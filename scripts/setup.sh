@@ -45,6 +45,29 @@ for var in "${REQUIRED_VARS[@]}"; do
 done
 
 print_info "Starting Azure resources setup..."
+
+print_warning "=========================================="
+print_warning "IMPORTANT: This is a PREVIEW feature"
+print_warning "=========================================="
+print_warning "Before running this script, ensure you have registered BOTH preview features:"
+print_warning "1. az feature register --namespace Microsoft.ContainerService --name AzureMonitorAppMonitoringPreview"
+print_warning "2. az feature register --namespace Microsoft.Insights --name OtlpApplicationInsights"
+print_warning ""
+print_warning "Check registration status:"
+print_warning "  az feature show --namespace Microsoft.ContainerService --name AzureMonitorAppMonitoringPreview --query properties.state -o tsv"
+print_warning "  az feature show --namespace Microsoft.Insights --name OtlpApplicationInsights --query properties.state -o tsv"
+print_warning ""
+print_warning "Both must show 'Registered' before proceeding."
+print_warning "=========================================="
+echo ""
+
+read -p "Have you registered both preview features? (y/n) " -n 1 -r
+echo
+if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    print_info "Please register the preview features first. Exiting."
+    exit 0
+fi
+
 print_info "Configuration:"
 echo "  Subscription: $SUBSCRIPTION_ID"
 echo "  Resource Group: $RESOURCE_GROUP"
@@ -113,17 +136,39 @@ az aks get-credentials \
 print_info "Verifying AKS connection..."
 kubectl get nodes
 
-# Create Application Insights
-print_info "Creating Application Insights '$APP_INSIGHTS_NAME'..."
-print_info "Note: Application Insights created via CLI has OTLP ingestion enabled by default"
-az monitor app-insights component create \
-  --app $APP_INSIGHTS_NAME \
-  --location $LOCATION \
-  --resource-group $RESOURCE_GROUP \
-  --application-type web \
-  --output none
+# Create Application Insights - MUST BE DONE MANUALLY IN PORTAL
+print_warning "=========================================="
+print_warning "Application Insights with OTLP Support"
+print_warning "=========================================="
+print_warning "Application Insights with OTLP support MUST be created via Azure Portal."
+print_warning "The 'Enable OTLP Support (Preview)' toggle is not available via CLI."
+print_warning ""
+print_warning "Please create Application Insights in the Azure Portal with these settings:"
+print_warning "  - Name: $APP_INSIGHTS_NAME"
+print_warning "  - Resource Group: $RESOURCE_GROUP"
+print_warning "  - Region: $LOCATION"
+print_warning "  - Resource Mode: Workspace-based"
+print_warning "  - Advanced Tab: Enable OTLP Support (Preview) = ON"
+print_warning "  - Advanced Tab: Use managed workspaces = Yes"
+print_warning ""
+print_warning "Reference: https://learn.microsoft.com/en-us/azure/azure-monitor/app/kubernetes-open-protocol#3-create-an-application-insights-resource-with-otlp-support"
+print_warning "=========================================="
+echo ""
 
-print_info "Verifying Application Insights was created with OTLP support..."
+read -p "Have you created the Application Insights resource in the Portal? (y/n) " -n 1 -r
+echo
+if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    print_info "Please create Application Insights in the Azure Portal first. Exiting."
+    print_info "Run this script again after creating the resource."
+    exit 0
+fi
+
+print_info "Verifying Application Insights resource exists..."
+if ! az monitor app-insights component show --app $APP_INSIGHTS_NAME --resource-group $RESOURCE_GROUP --output none 2>/dev/null; then
+    print_error "Application Insights resource '$APP_INSIGHTS_NAME' not found in resource group '$RESOURCE_GROUP'"
+    print_error "Please create it in the Azure Portal first."
+    exit 1
+fi
 
 # Get Application Insights details
 export APP_INSIGHTS_CONNECTION_STRING=$(az monitor app-insights component show \
