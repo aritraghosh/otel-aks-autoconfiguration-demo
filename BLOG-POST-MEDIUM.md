@@ -66,7 +66,7 @@ The SDK automatically reads the injected `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` en
 I've created a complete **3-tier application** (Frontend → Backend → PostgreSQL) instrumented with pure OpenTelemetry to demonstrate this feature.
 
 ### 🔗 GitHub Repository
-**[https://github.com/YOUR-USERNAME/otel-aks-demo](https://github.com/YOUR-USERNAME/otel-aks-demo)**
+**[https://github.com/aritraghosh/otel-aks-autoconfiguration-demo](https://github.com/aritraghosh/otel-aks-autoconfiguration-demo)**
 
 ### What's Included
 
@@ -88,7 +88,7 @@ I've created a complete **3-tier application** (Frontend → Backend → Postgre
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/YOUR-USERNAME/otel-aks-demo
+git clone https://github.com/aritraghosh/otel-aks-autoconfiguration-demo
 cd otel-aks-demo/simple-3tier
 ```
 
@@ -403,7 +403,7 @@ kubectl get pods -n kube-system | grep ama
 kubectl delete pods -n kube-system -l rsName=ama-logs
 ```
 
-See the complete troubleshooting guide in the [repository documentation](https://github.com/YOUR-USERNAME/otel-aks-demo/blob/main/simple-3tier/SETUP.md).
+See the complete troubleshooting guide in the [repository documentation](https://github.com/aritraghosh/otel-aks-autoconfiguration-demo/blob/main/simple-3tier/SETUP.md).
 
 ## Cost Estimate
 
@@ -457,7 +457,7 @@ Running this demo costs approximately:
 
 ## Try It Now!
 
-**🔗 Complete Demo Repository**: [github.com/YOUR-USERNAME/otel-aks-demo](https://github.com/YOUR-USERNAME/otel-aks-demo)
+**🔗 Complete Demo Repository**: [github.com/aritraghosh/otel-aks-autoconfiguration-demo](https://github.com/aritraghosh/otel-aks-autoconfiguration-demo)
 
 The repository includes:
 - ✅ Working 3-tier application
@@ -472,7 +472,7 @@ The repository includes:
 
 ```bash
 # Get started in 3 commands:
-git clone https://github.com/YOUR-USERNAME/otel-aks-demo
+git clone https://github.com/aritraghosh/otel-aks-autoconfiguration-demo
 cd otel-aks-demo/simple-3tier
 ./scripts/setup.sh && ./scripts/build-and-push.sh && ./scripts/deploy.sh
 ```
@@ -502,13 +502,13 @@ The best part? **It takes 20 minutes to see it working** with the demo repositor
 
 ## Resources
 
-- **Demo Repository**: [github.com/YOUR-USERNAME/otel-aks-demo](https://github.com/YOUR-USERNAME/otel-aks-demo)
+- **Demo Repository**: [github.com/aritraghosh/otel-aks-autoconfiguration-demo](https://github.com/aritraghosh/otel-aks-autoconfiguration-demo)
 - **Azure Documentation**: [OpenTelemetry Auto-Configuration for AKS](https://learn.microsoft.com/en-us/azure/azure-monitor/app/kubernetes-open-protocol)
 - **OpenTelemetry**: [opentelemetry.io](https://opentelemetry.io)
 
 ---
 
-*Found this helpful? ⭐ Star the [repository](https://github.com/YOUR-USERNAME/otel-aks-demo) and share with your team!*
+*Found this helpful? ⭐ Star the [repository](https://github.com/aritraghosh/otel-aks-autoconfiguration-demo) and share with your team!*
 
 *Questions? Drop a comment below or open an issue on GitHub.*
 

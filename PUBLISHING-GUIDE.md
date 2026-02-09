@@ -65,7 +65,7 @@ All scripts in `scripts/` directory:
 
 ### 1. Clone Repository
 ```bash
-git clone https://github.com/YOUR-USERNAME/otel-aks-demo
+git clone https://github.com/aritraghosh/otel-aks-autoconfiguration-demo
 cd otel-aks-demo/simple-3tier
 ```
 
@@ -118,7 +118,7 @@ mv README-NEW.md README.md
 
 In BLOG-POST.md, update the repository link section:
 ```markdown
-**🔗 GitHub Repository**: [github.com/YOUR-USERNAME/otel-aks-demo](https://github.com/YOUR-USERNAME/otel-aks-demo)
+**🔗 GitHub Repository**: [github.com/aritraghosh/otel-aks-autoconfiguration-demo](https://github.com/aritraghosh/otel-aks-autoconfiguration-demo)
 ```
 
 ### 4. Test the Scripts
@@ -235,7 +235,7 @@ Include at end of blog post:
 ## Try It Yourself!
 
 The complete demo with automation scripts is available on GitHub:
-👉 [github.com/YOUR-USERNAME/otel-aks-demo](https://github.com/YOUR-USERNAME/otel-aks-demo)
+👉 [github.com/aritraghosh/otel-aks-autoconfiguration-demo](https://github.com/aritraghosh/otel-aks-autoconfiguration-demo)
 
 Takes ~20 minutes to run the entire demo!
 

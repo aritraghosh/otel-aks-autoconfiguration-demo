@@ -51,7 +51,7 @@ This repository demonstrates how to use **standard OpenTelemetry SDK** with **Az
 ### 1. Clone Repository
 
 ```bash
-git clone https://github.com/your-repo/otel-aks-demo
+git clone https://github.com/aritraghosh/otel-aks-autoconfiguration-demo
 cd otel-aks-demo/simple-3tier
 ```
 
@@ -293,7 +293,7 @@ Found an issue or have a suggestion? Please open an issue or PR!
 ## 📧 Contact
 
 Questions? Feedback? Open an issue or reach out:
-- GitHub Issues: [github.com/your-repo/otel-aks-demo/issues](https://github.com/your-repo/otel-aks-demo/issues)
+- GitHub Issues: [github.com/aritraghosh/otel-aks-autoconfiguration-demo/issues](https://github.com/aritraghosh/otel-aks-autoconfiguration-demo/issues)
 - Twitter: [@your-handle]
 - Blog: [your-blog.com]
 
